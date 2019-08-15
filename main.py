@@ -1,0 +1,261 @@
+__author__ = 'Matt'
+from lxml import html
+import sys, getopt
+import requests
+import urllib2
+from datetime import datetime
+#import ephem                        # This seems to be useful but isn't necessary
+import json
+import time
+import gspread
+from oauth2client.client import SignedJwtAssertionCredentials
+import subprocess
+
+'''
+Worked on in summer of 2015.
+Accesses solar array and scrapes values from the web GUI, then throws them onto a Google Sheet where the values can be
+handled. Will be run as a CRON job.
+
+This could probably be compacted and made substantially neater. Especially by having the program itself run every 30
+minutes, rather than constantly.
+
+'''
+
+
+
+
+def cur_time(format):
+    if format == "s":  # Time
+        current_time = str((datetime.time(datetime.now())))
+        current_time = current_time[0:8]
+    elif format == "f":  # Date & Time
+        current_time = str(((datetime.now())))
+        current_time = current_time[0:18]
+    else:
+        current_time = str(((datetime.now())))
+        current_time = current_time[0:18]
+        # I know this is lazy but I'll do it anyway
+    return current_time
+
+
+time_now = cur_time("s")
+date_now = cur_time("f")
+
+
+
+# Google Spreadsheet stuff. I could store things locally but this will make things at least a bit easier.
+print "PySolar v.0.0"
+print "[%s] Initializing..." % cur_time("f")
+#print "Connecting to Drive..."
+
+# Drive init
+json_key = json.load(open('PySolar-13eb6f4d0758.json'))
+scope = ['https://spreadsheets.google.com/feeds']
+credentials = SignedJwtAssertionCredentials(json_key['client_email'], json_key['private_key'], scope)
+gc = gspread.authorize(credentials)
+sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/1Pa10Zm4k4WA5LsHllVYYnvETOGDilkhLoqBej_ajxZQ/edit#gid=0")
+worksheet = sh.get_worksheet(0)
+last_pos = worksheet.acell('F1').value
+
+times_run = 0
+#home = ephem.Observer()
+#home.lat = 37.9
+#home.lon = 122.0
+ip_address_last_digit = 9  ## Reminder: Assign it a static IP
+
+
+def cur_time(format):
+    if format == "s":  # Time
+        current_time = str(datetime.time(datetime.now()))
+        current_time = current_time[0:8]
+    elif format == "f":  # Date & Time
+        current_time = str(datetime.now())
+        current_time = current_time[0:18]
+    else:
+        current_time = str(datetime.now())
+        current_time = current_time[0:18]
+        # I know this is lazy but I'll do it anyway
+    return current_time
+
+
+time_now = cur_time("s")
+date_now = cur_time("f")
+
+
+def internet_on():
+    print "Determining connection to the internet..."
+    try:
+        response = urllib2.urlopen('http://google.com', timeout=1)
+        print "Connected successfully"
+        return True
+    except urllib2.URLError as err:
+        print "Error: Could not connect"
+        raise SystemExit
+    return False
+
+
+def local_internet_on():
+    print "Determining connection to solar system..."
+    try:
+        response = urllib2.urlopen('http://192.168.2.%s' % ip_address_last_digit, timeout=1)
+        print "Connected successfully"
+        return True
+    except urllib2.URLError as err:
+        print "Error: Can't connect to the solar array. Check the POE connection, or the status on the box."
+        raise SystemExit
+    return False
+
+
+apache_address = "127.0.0.1:8000"
+
+
+def apache_status():
+    print "Determining webserver status..."
+    try:
+        response = urllib2.urlopen('apache_address', timeout=1)
+        print "Connected successfully"
+        return True
+    except urllib2.URLError as err:
+        print "Error: Could not connect"
+        pass
+    return False
+
+
+def init():
+    print "[%s]Starting..." % date_now
+    debug_loop()
+    if get_mi_status == 0:  # Should adjust this so it doesn't screw up at night
+        waitloop(0)
+    elif get_mi_status != 0:  # If MIs are active already, jump right in.
+        waitloop(-1)
+    else:
+        print "[%s]Something isn't right, can't get status of solar array. Quitting." % cur_time("f")
+        # Add something to open the webserver again, retrieve local IP address,
+        #
+
+
+#    next_sunset = home.previous_setting(ephem.Sun)
+#    next_sunrise = home.previous_rising(ephem.Sun)
+
+
+def get_data_today(verbose):  # Get today's total usage in kWh
+    page = requests.get('http://192.168.2.%s/production' % ip_address_last_digit)  # Pull the webpage
+    tree = html.fromstring(page.text)
+    data = tree.xpath("/html/body/div[1]/table/tr[3]/td[2]/text()")  # Grab the value
+    if verbose:
+        print "Total power supplied today:", data[0]
+    energy_kWh = data[0]
+    energy_Wh = int((float(energy_kWh[1:5]) * 1000))  # Convert it to the base unit, watt hours, to make math easier
+    return energy_Wh
+
+
+def get_mi_status(verbose):  # Boolean
+    if verbose:
+        print "Determining current solar cell status..."
+    page = requests.get('http://192.168.2.%s/home' % ip_address_last_digit)
+    tree = html.fromstring(page.text)
+    data = tree.xpath("/html/body/table/tr/td[2]/table/tr[5]/td[2]/text()")
+    mi_online = int(data[0])
+    # Note: I had to remove tbody from xpath Chrome gave me, and add '/text()' after it.
+    if verbose:
+        print "%s out of 24 microinverters online" % mi_online
+    return mi_online
+
+
+def debug_loop():
+    local_internet_on()
+    internet_on()
+    get_data_today(False)
+    get_mi_status(True)
+
+
+def waitloop(iteration):  # 0 = sunrise wait, 1 = main loop, 2 = shutting down, -1 = jump to daytime mode
+    time4 = cur_time("s")
+    then = datetime.now()
+    if iteration == 0:
+        print "[%s]Waiting for sunrise..." % cur_time("f")
+        sc_active = False
+        while not sc_active:
+            if get_mi_status(False) > 0:  # Check to see if at least one photoreceptor is active
+                iteration = 1
+                sc_active = True
+                return sc_active
+            else:
+                time.sleep(300)  # Otherwise, wait for 5 minutes and then check again.
+        waitloop(1)
+    elif iteration == 1:
+        print "[%s] Solar cells reporting activity, starting up." % date_now
+        runningloop(False)
+        # Here is where the publishing function will go. Will need to check status of solar panels.
+    elif iteration == 2:
+        print "[%s] Solar cells inactive. Shutting down." % date_now
+        # Here is where either a SystemExit will go or something more controlled. Also needs to check status.
+    elif iteration == -1:
+        print "Jumping right to daytime mode"
+        runningloop(False)
+    else:
+        print "Something isn't right, you shouldn't see this."
+
+
+"""
+The webserver that I'm going to get running is probably going to be an Apache server, because it looks like it might
+just be easier to implement. There will probably be zero communication between the webserver and python (except maybe
+to check status). as most data will be retrieved by Google Docs. Maybe I could implement this a little nicer at some
+future point in time.
+
+
+Otherwise, what seems to work pretty well is just pushing the data to Google Docs and handling the data there.
+
+"""
+
+
+def runningloop(debug):  # Main loop that runs and reports to the webserver [which I'll still need to get running.]
+    print "[%s} Starting Apache Server..." % date_now
+    # subprocess.call(['C:\\Temp\\a b c\\Notepad.exe', 'C:\\test.txt']) # Set this up on the raspi
+    print "Webserver started at %s" % apache_address
+    print "Setting things up with Google Docs..."
+    print "Everything is ready, will now wait until sunset."
+    working_cell = (last_pos[1])
+    sunset = False
+    last_data = 0
+    data = 0
+    cur_data = 0
+    n = 5
+    first_loop = True
+    # for _ in range(5): # Probably going to change this, this is like this for debugging only
+    while not sunset:
+        if 0 <= get_mi_status(False) <= 24:
+            print "Note: Microinverters are not fully active, shutdown soon."
+        if get_mi_status(False) == 0:
+            sunset = True
+        if first_loop:
+            cur_data = get_data_today(False)
+        if not first_loop:  # Don't subtract the value if it's the first time looping.
+            last_data = worksheet.acell(last_pos).value
+            data = get_data_today(False)
+            cur_data = data - last_data
+        # cur_data /= 1000           # Too lazy to implement floats rn
+        cur_pos = str(int(last_pos[1:]) + 1)
+        cur_cell = "B" + "%s" % cur_pos
+        ts_cell = "A" + "%s" % cur_pos
+        worksheet.update_acell(cur_cell, cur_data)
+        worksheet.update_acell(ts_cell, date_now)
+        worksheet.update_acell("F1", cur_cell)
+        first_loop = False
+        print "[%s] Data written to Docs: %s mW today" % (cur_time("f"),get_data_today(False))
+        time.sleep(1800)  # Wait for 30 minutes before checking again.
+
+    print "[%s] Zero microinverters online. Preparing for night." % date_now
+    waitloop(2)
+
+"""
+I'm going to want to add a CROM job on the raspi that starts at 5:30 or something and ends at a reasonable time
+around sunset. Will probably end when the microinverter status drops, ephem sunset matches datetime.now(), or just
+at some basic time.
+"""
+
+# init()
+debug_loop()
+waitloop(0)
+# if (get_mi_status()) == 0:
+runningloop(False)
