@@ -6,9 +6,7 @@ import logging
 import re
 # import urllib2
 from urllib.error import URLError
-from urllib.request import urlopen
 from datetime import datetime, timezone
-import json
 import time
 from logging.handlers import RotatingFileHandler
 import gspread
@@ -124,24 +122,24 @@ date_now = cur_time("f")
 def internet_on():
     log.info("Determining connection to the internet...")
     try:
-        response = urlopen('http://google.com', timeout=1)
+        response = requests.get('http://google.com', timeout=1)
         log.info("Connected successfully")
         return True
     except URLError as err:
         log.info("Error: Could not connect")
-        raise SystemExit
+        raise
     return False
 
 
-def local_internet_on():
+def local_internet_on(ip):
     log.info("Determining connection to solar system...")
     try:
-        response = urlopen('http://%s' % ip_address, timeout=1)
+        response = requests.get('http://%s' % ip, timeout=10)
         log.info("Connected successfully")
-        return True
+        return response.status_code == 200
     except URLError as err:
-        log.info("Error: Can't connect to the solar array. Check the POE connection, or the status on the box.")
-        raise SystemExit
+        log.exception("Error: Can't connect to the solar array. Check the POE connection, or the status on the box.")
+        raise
     return False
 
 
@@ -151,7 +149,7 @@ apache_address = "127.0.0.1:8000"
 def apache_status():
     log.info("Determining webserver status...")
     try:
-        response = urlopen('apache_address', timeout=1)
+        response = requests.get('apache_address', timeout=1)
         log.info("Connected successfully")
         return True
     except URLError as err:
@@ -194,8 +192,6 @@ def get_data_today(verbose):  # Get today's total usage in kWh
 
     if "kW" in data[0]:
         data_float *= 1000
-    elif "W" in data[0]:
-          pass
 
     energy_Wh = int(data_float)  # Convert it to the base unit, watt hours, to make math easier
     return energy_Wh
@@ -228,14 +224,21 @@ def get_current_w():
 
     if "kW" in data[0]:
         data_float *= 1000  # Convert it to watts
-    elif "W" in data[0]:
-        pass
     return data_float
 
 
 def debug_loop():
-    local_internet_on()
-    internet_on()
+    global ip_address  # oof
+    # Try to see if the IP address has been changed
+    local_ip_works = False
+    try:
+        local_ip_works = local_internet_on(ip_address)
+    except:
+        log.exception("Error occurred when connecting to local page")
+    if not local_ip_works:
+        ip_address = worksheet.acell("J2").value
+        local_internet_on(ip_address)  # If this crashes out it's fine
+    internet_on()  # This, however, needs to work
     get_data_today(False)
     get_mi_status(True)
 
@@ -297,35 +300,40 @@ def runningloop(debug):  # Main loop that runs and reports to the webserver [whi
     first_loop = True
     # for _ in range(5): # Probably going to change this, this is like this for debugging only
     while not sunset:
-        mi_online = get_mi_status(False)
-        cur_kw_generation = get_current_w()
-        # if 0 <= mi_online <= 24:
-        #   log.info("Note: Microinverters are not fully active, shutdown soon.")
-        if mi_online == 0:
-            sunset = True
-        if first_loop:
-            cur_data = get_data_today(False)
-        if not first_loop:  # Don't subtract the value if it's the first time looping.
-            # last_data = worksheet.acell("B" + last_pos).value
-            cur_data = get_data_today(False)
-            # cur_data = int(data) - int(last_data)
-        # cur_data /= 1000           # Too lazy to implement floats rn
-        # last_pos = worksheet.acell('F1').value
-        cur_pos = str(int(last_pos) + 1)
-        cur_cell = "B" + "%s" % cur_pos
-        ts_cell = "A" + "%s" % cur_pos
-        mi_cell = "C" + "%s" % cur_pos
-        kw_cell = "D" + "%s" % cur_pos
-        worksheet.update_acell(cur_cell, cur_data)
-        worksheet.update_acell(ts_cell, cur_time("f"))
-        worksheet.update_acell(mi_cell, mi_online)
-        worksheet.update_acell(kw_cell, cur_kw_generation)
-        worksheet.update_acell("F1", cur_pos)
-        last_pos = cur_pos
-        first_loop = False
-        log.info("[%s] Data written to Docs: %s mW today" % (cur_time("f"), get_data_today(False)))
-        # Worth noting the system seems to update the web interface about every 10 minutes or so
-        time.sleep(600)  # Wait for 10 minutes before checking again.
+        try:
+            mi_online = get_mi_status(False)
+            cur_kw_generation = get_current_w()
+            # if 0 <= mi_online <= 24:
+            #   log.info("Note: Microinverters are not fully active, shutdown soon.")
+            if mi_online == 0:
+                sunset = True
+            if first_loop:
+                cur_data = get_data_today(False)
+            if not first_loop:  # Don't subtract the value if it's the first time looping.
+                # last_data = worksheet.acell("B" + last_pos).value
+                cur_data = get_data_today(False)
+                # cur_data = int(data) - int(last_data)
+            # cur_data /= 1000           # Too lazy to implement floats rn
+            # last_pos = worksheet.acell('F1').value
+            cur_pos = str(int(last_pos) + 1)
+            cur_cell = "B" + "%s" % cur_pos
+            ts_cell = "A" + "%s" % cur_pos
+            mi_cell = "C" + "%s" % cur_pos
+            kw_cell = "D" + "%s" % cur_pos
+            worksheet.update_acell(cur_cell, cur_data)
+            worksheet.update_acell(ts_cell, cur_time("f"))
+            worksheet.update_acell(mi_cell, mi_online)
+            worksheet.update_acell(kw_cell, cur_kw_generation)
+            worksheet.update_acell("F1", cur_pos)
+            last_pos = cur_pos
+            first_loop = False
+            log.info("[%s] Data written to Docs: %s mW today" % (cur_time("f"), get_data_today(False)))
+        except Exception:
+            log.exception("Something failed while running the main loop")
+        finally:
+            # Worth noting the system seems to update the web interface about every 10 minutes or so
+            if not sunset:
+                time.sleep(600)
 
     log.info("[%s] Zero microinverters online. Preparing for night." % cur_time("f"))
     waitloop(2)
