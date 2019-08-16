@@ -299,8 +299,8 @@ def runningloop(debug):  # Main loop that runs and reports to the webserver [whi
     while not sunset:
         mi_online = get_mi_status(False)
         cur_kw_generation = get_current_w()
-        if 0 <= mi_online <= 24:
-            log.info("Note: Microinverters are not fully active, shutdown soon.")
+        # if 0 <= mi_online <= 24:
+        #   log.info("Note: Microinverters are not fully active, shutdown soon.")
         if mi_online == 0:
             sunset = True
         if first_loop:
