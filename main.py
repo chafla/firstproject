@@ -9,6 +9,7 @@ from urllib.request import urlopen
 from datetime import datetime, timezone
 import json
 import time
+from logging.handlers import RotatingFileHandler
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import os
@@ -18,8 +19,11 @@ dirname = os.path.dirname(__file__)
 
 log = logging.getLogger()
 
+
+handler = RotatingFileHandler(os.path.join(dirname, "pysolar.log"), mode='a', maxBytes=5*1024*1024,
+                              backupCount=2, encoding="utf-8", delay=0)
 log.setLevel(logging.INFO)
-handler = logging.FileHandler(filename=os.path.join(dirname, "pysolar.log"), encoding='utf-8', mode='a')
+# handler = logging.FileHandler(filename=os.path.join(dirname, "pysolar.log"), encoding='utf-8', mode='a')
 formatter = logging.Formatter("{asctime} - {levelname} - {message}", style="{")
 stdout_handler = logging.StreamHandler(sys.stdout)
 # stderr_handler = logging.StreamHandler(sys.stderr)
@@ -194,6 +198,13 @@ def get_mi_status(verbose):  # Boolean
     return mi_online
 
 
+def get_current_kw():
+    page = requests.get("http://%s/production" % ip_address)
+    tree = html.fromstring(page.text)
+    data = tree.xpath("/html/body/div[1]/table/tr[2]/td[2]/text()")
+    cur_kw = float(data[0].strip().rstrip(" kW"))
+    return cur_kw
+
 def debug_loop():
     local_internet_on()
     internet_on()
@@ -257,9 +268,11 @@ def runningloop(debug):  # Main loop that runs and reports to the webserver [whi
     first_loop = True
     # for _ in range(5): # Probably going to change this, this is like this for debugging only
     while not sunset:
-        if 0 <= get_mi_status(False) <= 24:
+        mi_online = get_mi_status(False)
+        cur_kw_generation = get_current_kw()
+        if 0 <= mi_online <= 24:
             log.info("Note: Microinverters are not fully active, shutdown soon.")
-        if get_mi_status(False) == 0:
+        if mi_online == 0:
             sunset = True
         if first_loop:
             cur_data = get_data_today(False)
@@ -271,8 +284,12 @@ def runningloop(debug):  # Main loop that runs and reports to the webserver [whi
         cur_pos = str(int(last_pos[1:]) + 1)
         cur_cell = "B" + "%s" % cur_pos
         ts_cell = "A" + "%s" % cur_pos
+        mi_cell = "C" + "%s" % cur_pos
+        kw_cell = "D" + "%s" % cur_pos
         worksheet.update_acell(cur_cell, cur_data)
         worksheet.update_acell(ts_cell, date_now)
+        worksheet.update_acell(mi_cell, mi_online)
+        worksheet.update_acell(kw_cell, cur_kw_generation)
         worksheet.update_acell("F1", cur_cell)
         first_loop = False
         log.info("[%s] Data written to Docs: %s mW today" % (cur_time("f"), get_data_today(False)))
