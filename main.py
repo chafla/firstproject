@@ -3,6 +3,7 @@ from lxml import html
 import sys, getopt
 import requests
 import logging
+import re
 # import urllib2
 from urllib.error import URLError
 from urllib.request import urlopen
@@ -43,6 +44,8 @@ This could probably be compacted and made substantially neater. Especially by ha
 minutes, rather than constantly.
 
 '''
+
+number_pattern = re.compile(r"([\d.]+)")
 
 
 def cur_time(format):
@@ -180,8 +183,21 @@ def get_data_today(verbose):  # Get today's total usage in kWh
     data = tree.xpath("/html/body/div[1]/table/tr[3]/td[2]/text()")  # Grab the value
     if verbose:
         log.info("Total power supplied today:", data[0])
-    energy_kWh = data[0]
-    energy_Wh = int((float(energy_kWh[1:5]) * 1000))  # Convert it to the base unit, watt hours, to make math easier
+
+    match = number_pattern.findall(data[0])
+    try:
+        data_float = float(match[0])
+    except ValueError:
+        log.exception("Couldn't convert to float")
+        return 0
+    # cur_kw = float(data[0].strip().rstrip(" kW"))
+
+    if "kW" in data[0]:
+        pass
+    elif "W" in data[0]:
+        data_float /= 1000  # Convert it to kW
+
+    energy_Wh = int(data_float)  # Convert it to the base unit, watt hours, to make math easier
     return energy_Wh
 
 
@@ -198,12 +214,24 @@ def get_mi_status(verbose):  # Boolean
     return mi_online
 
 
-def get_current_kw():
+def get_current_w():
     page = requests.get("http://%s/production" % ip_address)
     tree = html.fromstring(page.text)
     data = tree.xpath("/html/body/div[1]/table/tr[2]/td[2]/text()")
-    cur_kw = float(data[0].strip().rstrip(" kW"))
-    return cur_kw
+    match = number_pattern.findall(data[0])
+    try:
+        data_float = float(match[0])
+    except ValueError:
+        log.exception("Couldn't convert to float")
+        return 0
+    # cur_kw = float(data[0].strip().rstrip(" kW"))
+
+    if "kW" in data[0]:
+        data_float /= 1000  # Convert it to watts
+    elif "W" in data[0]:
+        pass
+    return data_float
+
 
 def debug_loop():
     local_internet_on()
@@ -225,7 +253,7 @@ def waitloop(iteration):  # 0 = sunrise wait, 1 = main loop, 2 = shutting down, 
                 sc_active = True
                 return sc_active
             else:
-                time.sleep(300)  # Otherwise, wait for 5 minutes and then check again.
+                time.sleep(600)  # Otherwise, wait for 5 minutes and then check again.
         waitloop(1)
     elif iteration == 1:
         log.info("[%s] Solar cells reporting activity, starting up." % date_now)
@@ -270,7 +298,7 @@ def runningloop(debug):  # Main loop that runs and reports to the webserver [whi
     # for _ in range(5): # Probably going to change this, this is like this for debugging only
     while not sunset:
         mi_online = get_mi_status(False)
-        cur_kw_generation = get_current_kw()
+        cur_kw_generation = get_current_w()
         if 0 <= mi_online <= 24:
             log.info("Note: Microinverters are not fully active, shutdown soon.")
         if mi_online == 0:
