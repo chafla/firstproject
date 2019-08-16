@@ -259,7 +259,8 @@ def runningloop(debug):  # Main loop that runs and reports to the webserver [whi
     # log.info("Webserver started at %s" % apache_address)
     log.info("Setting things up with Google Docs...")
     log.info("Everything is ready, will now wait until sunset.")
-    working_cell = (last_pos[1])
+    # working_cell = (last_pos)
+    last_pos = worksheet.acell('F1').value
     sunset = False
     last_data = 0
     data = 0
@@ -277,11 +278,12 @@ def runningloop(debug):  # Main loop that runs and reports to the webserver [whi
         if first_loop:
             cur_data = get_data_today(False)
         if not first_loop:  # Don't subtract the value if it's the first time looping.
-            last_data = worksheet.acell(last_pos).value
+            last_data = worksheet.acell("B" + last_pos).value
             data = get_data_today(False)
-            cur_data = data - last_data
+            cur_data = int(data) - int(last_data)
         # cur_data /= 1000           # Too lazy to implement floats rn
-        cur_pos = str(int(last_pos[1:]) + 1)
+        # last_pos = worksheet.acell('F1').value
+        cur_pos = str(int(last_pos) + 1)
         cur_cell = "B" + "%s" % cur_pos
         ts_cell = "A" + "%s" % cur_pos
         mi_cell = "C" + "%s" % cur_pos
@@ -290,10 +292,11 @@ def runningloop(debug):  # Main loop that runs and reports to the webserver [whi
         worksheet.update_acell(ts_cell, date_now)
         worksheet.update_acell(mi_cell, mi_online)
         worksheet.update_acell(kw_cell, cur_kw_generation)
-        worksheet.update_acell("F1", cur_cell)
+        worksheet.update_acell("F1", cur_pos)
+        last_pos = cur_pos
         first_loop = False
         log.info("[%s] Data written to Docs: %s mW today" % (cur_time("f"), get_data_today(False)))
-        time.sleep(1800)  # Wait for 30 minutes before checking again.
+        time.sleep(60)  # Wait for 30 minutes before checking again.
 
     log.info("[%s] Zero microinverters online. Preparing for night." % date_now)
     waitloop(2)
