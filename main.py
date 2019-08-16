@@ -4,6 +4,7 @@ import sys, getopt
 import requests
 import logging
 import re
+import json
 # import urllib2
 from urllib.error import URLError
 from datetime import datetime, timezone
@@ -87,12 +88,17 @@ scope = [
     'https://spreadsheets.google.com/feeds',
     'https://www.googleapis.com/auth/drive'
 ]
+with open(os.path.join(dirname, "config.json"), "r") as raw_config_json:
+    config_json = json.load(raw_config_json)
 
-json_path = os.path.join(dirname, 'namenproxy-db3a48c2d3d4.json')
+creds_path = config_json["service_account_json"]
+sheet_url = config_json["chart_url"]
+
+json_path = os.path.join(dirname, creds_path)
 credentials = ServiceAccountCredentials.from_json_keyfile_name(json_path, scope)
 # credentials = SignedJwtAssertionCredentials(json_key['client_email'], json_key['private_key'], scope)
 gc = gspread.authorize(credentials)
-sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/1Pa10Zm4k4WA5LsHllVYYnvETOGDilkhLoqBej_ajxZQ/edit#gid=0")
+sh = gc.open_by_url(sheet_url)
 worksheet = sh.get_worksheet(0)
 last_pos = worksheet.acell('F1').value
 
