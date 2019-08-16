@@ -193,9 +193,9 @@ def get_data_today(verbose):  # Get today's total usage in kWh
     # cur_kw = float(data[0].strip().rstrip(" kW"))
 
     if "kW" in data[0]:
-        pass
+        data_float *= 1000
     elif "W" in data[0]:
-        data_float /= 1000  # Convert it to kW
+          pass
 
     energy_Wh = int(data_float)  # Convert it to the base unit, watt hours, to make math easier
     return energy_Wh
@@ -227,7 +227,7 @@ def get_current_w():
     # cur_kw = float(data[0].strip().rstrip(" kW"))
 
     if "kW" in data[0]:
-        data_float /= 1000  # Convert it to watts
+        data_float *= 1000  # Convert it to watts
     elif "W" in data[0]:
         pass
     return data_float
@@ -306,9 +306,9 @@ def runningloop(debug):  # Main loop that runs and reports to the webserver [whi
         if first_loop:
             cur_data = get_data_today(False)
         if not first_loop:  # Don't subtract the value if it's the first time looping.
-            last_data = worksheet.acell("B" + last_pos).value
-            data = get_data_today(False)
-            cur_data = int(data) - int(last_data)
+            # last_data = worksheet.acell("B" + last_pos).value
+            cur_data = get_data_today(False)
+            # cur_data = int(data) - int(last_data)
         # cur_data /= 1000           # Too lazy to implement floats rn
         # last_pos = worksheet.acell('F1').value
         cur_pos = str(int(last_pos) + 1)
@@ -317,16 +317,17 @@ def runningloop(debug):  # Main loop that runs and reports to the webserver [whi
         mi_cell = "C" + "%s" % cur_pos
         kw_cell = "D" + "%s" % cur_pos
         worksheet.update_acell(cur_cell, cur_data)
-        worksheet.update_acell(ts_cell, date_now)
+        worksheet.update_acell(ts_cell, cur_time("f"))
         worksheet.update_acell(mi_cell, mi_online)
         worksheet.update_acell(kw_cell, cur_kw_generation)
         worksheet.update_acell("F1", cur_pos)
         last_pos = cur_pos
         first_loop = False
         log.info("[%s] Data written to Docs: %s mW today" % (cur_time("f"), get_data_today(False)))
-        time.sleep(60)  # Wait for 30 minutes before checking again.
+        # Worth noting the system seems to update the web interface about every 10 minutes or so
+        time.sleep(600)  # Wait for 10 minutes before checking again.
 
-    log.info("[%s] Zero microinverters online. Preparing for night." % date_now)
+    log.info("[%s] Zero microinverters online. Preparing for night." % cur_time("f"))
     waitloop(2)
 
 
