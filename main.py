@@ -362,9 +362,9 @@ def runningloop(debug):  # Main loop that runs and reports to the webserver [whi
     # for _ in range(5): # Probably going to change this, this is like this for debugging only
     while not sunset:
         try:
-            if time.time() - last_refresh > (60 * 45):
-                credentials.refresh(httplib2.Http())
-                gc.authorize(credentials)
+            # Periodically refresh the access token if it's expired
+            if credentials.access_token_expired:
+                gc.login()
             mi_online = get_mi_status(False)
             cur_kw_generation = get_current_w()
             # if 0 <= mi_online <= 24:
