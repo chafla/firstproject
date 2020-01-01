@@ -1,3 +1,5 @@
+import httplib2
+
 __author__ = 'Matt'
 from lxml import html
 import sys, getopt
@@ -63,6 +65,8 @@ def cur_time(format):
 
 time_now = cur_time("s")
 date_now = cur_time("f")
+
+last_refresh = time.time()
 
 # a = Astral()
 
@@ -341,6 +345,7 @@ Otherwise, what seems to work pretty well is just pushing the data to Google Doc
 
 
 def runningloop(debug):  # Main loop that runs and reports to the webserver [which I'll still need to get running.]
+    global gc
     # log.info("[%s} Starting Apache Server..." % date_now)
     # subprocess.call(['C:\\Temp\\a b c\\Notepad.exe', 'C:\\test.txt']) # Set this up on the raspi
     # log.info("Webserver started at %s" % apache_address)
@@ -357,6 +362,9 @@ def runningloop(debug):  # Main loop that runs and reports to the webserver [whi
     # for _ in range(5): # Probably going to change this, this is like this for debugging only
     while not sunset:
         try:
+            if time.time() - last_refresh > (60 * 45):
+                credentials.refresh(httplib2.Http())
+                gc.authorize(credentials)
             mi_online = get_mi_status(False)
             cur_kw_generation = get_current_w()
             # if 0 <= mi_online <= 24:
