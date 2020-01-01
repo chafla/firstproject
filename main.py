@@ -125,6 +125,55 @@ time_now = cur_time("s")
 date_now = cur_time("f")
 
 
+def get_ip_address(tag="enphase", base_ip_range="192.168.1"):
+    """
+    Get the IP address of the solar panel.
+
+    Performs a quick scan through IP addresses on the network, and
+    runs a quick regex pattern match on the HTML to see if the page
+    contains our input tag. If it does, return the IP address found.
+
+    :param base_ip_range: Base of the ip addresses to search for.
+        Should be of the form xxx.xxx.xxx, without the last group.
+    :param tag: Tag to search for.
+    :return: IP address, or None if no IP can be found.
+    """
+
+    for i in range(0, 256):
+        ip = "{}.{}".format(base_ip_range, i)
+        try:
+            response = requests.get('http://%s' % ip, timeout=2)
+            if re.search(tag, response.text):
+                return ip
+        except (requests.ConnectionError, requests.Timeout):
+            continue
+    else:
+        return None
+
+
+def get_request(ip, path):
+    """
+    Get the http response. Checks and possibly redetermines the current IP address.
+    :param ip: ip address that we believe it's at
+    :param path: Should be the full path including a leading slash if necessary
+    :return:
+    """
+
+    try:
+        response = requests.get("http://{}{}".format(ip, path))
+    except requests.ConnectionError:
+        global ip_address  # so sorry
+        new_ip = get_ip_address()
+        if new_ip is not None:
+            ip_address = new_ip
+            log.info("IP address updated to {}.".format(new_ip))
+            response = requests.get("http://{}{}".format(new_ip, path))
+        else:
+            raise RuntimeError("A seemingly valid IP address failed.")
+
+    return response
+
+
 def internet_on():
     log.info("Determining connection to the internet...")
     try:
@@ -140,7 +189,7 @@ def internet_on():
 def local_internet_on(ip):
     log.info("Determining connection to solar system...")
     try:
-        response = requests.get('http://%s' % ip, timeout=10)
+        response = get_request(ip, "/")
         log.info("Connected successfully")
         return response.status_code == 200
     except URLError as err:
@@ -182,7 +231,7 @@ def init():
 
 
 def get_data_today(verbose):  # Get today's total usage in kWh
-    page = requests.get('http://%s/production' % ip_address)  # Pull the webpage
+    page = get_request(ip_address, "/production")  # Pull the webpage
     tree = html.fromstring(page.text)
     data = tree.xpath("/html/body/div[1]/table/tr[3]/td[2]/text()")  # Grab the value
     if verbose:
@@ -206,7 +255,7 @@ def get_data_today(verbose):  # Get today's total usage in kWh
 def get_mi_status(verbose):  # Boolean
     if verbose:
         log.info("Determining current solar cell status...")
-    page = requests.get('http://%s/home' % ip_address)
+    page = get_request(ip_address, "/home")
     tree = html.fromstring(page.text)
     data = tree.xpath("/html/body/table/tr/td[2]/table/tr[5]/td[2]/text()")
     mi_online = int(data[0])
@@ -217,7 +266,8 @@ def get_mi_status(verbose):  # Boolean
 
 
 def get_current_w():
-    page = requests.get("http://%s/production" % ip_address)
+    page = get_request(ip_address, "/production")
+    # page = requests.get("http://%s/production" % ip_address)
     tree = html.fromstring(page.text)
     data = tree.xpath("/html/body/div[1]/table/tr[2]/td[2]/text()")
     match = number_pattern.findall(data[0])
@@ -352,8 +402,6 @@ at some basic time.
 """
 
 if __name__ == '__main__':
-    # init()
     debug_loop()
     waitloop(0)
-    # if (get_mi_status()) == 0:
     runningloop(False)
