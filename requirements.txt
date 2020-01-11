@@ -2,4 +2,3 @@ lxml
 requests
 oauth2client
 gspread
-astral
