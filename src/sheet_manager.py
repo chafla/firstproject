@@ -1,8 +1,8 @@
 import datetime
 import json
-import os
 import logging
 import gspread
+from requests import get
 from oauth2client.service_account import ServiceAccountCredentials
 
 ts_format = "%m/%d/%Y %H:%M:%S"
@@ -39,6 +39,11 @@ class SheetReader:
         self.mi_col = "C"
         self.cur_kw_col = "D"
 
+        self.ext_ip_cell = "K2"
+        self.int_ip_cell = "L2"
+
+        self._prev_ip = self._ip_address
+
     @property
     def gc(self):
         if self._credentials.access_token_expired:
@@ -57,6 +62,20 @@ class SheetReader:
     def cur_pos(self, value):
         self.worksheet.update_acell("F1", value)
 
+    @property
+    def _ip_address(self):
+        ext_ip = get("https://api.ipify.org").text
+        return ext_ip
+
+    def log_ip_address(self):
+        """
+        Log our internal and external IP address to the sheet
+        """
+
+        ip = self._ip_address
+        if self._prev_ip != ip:
+            self.worksheet.update_acell(self.ext_ip_cell, ip)
+
     def update_row(self, watt_hours, mi_online, cur_generation):
         """Update a full row of data."""
         # TODO Update this so that we can pass in a dictionary (or kwargs) with a column and data
@@ -74,6 +93,7 @@ class SheetReader:
         self.worksheet.update_acell(self.mi_col + pos, mi_online)
         self.worksheet.update_acell(self.cur_kw_col + pos, cur_generation)
 
+        # Log IP address for good measure
+        self.log_ip_address()
+
         log.info("Data written to Docs: %s mW today" % watt_hours)
-
-
