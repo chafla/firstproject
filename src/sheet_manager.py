@@ -42,7 +42,7 @@ class SheetReader:
         self.ext_ip_cell = "K2"
         self.int_ip_cell = "L2"
 
-        self._prev_ip = self._ip_address
+        self._prev_ip = None
 
     @property
     def gc(self):
@@ -75,6 +75,7 @@ class SheetReader:
         ip = self._ip_address
         if self._prev_ip != ip:
             self.worksheet.update_acell(self.ext_ip_cell, ip)
+            self._prev_ip = ip
 
     def update_row(self, watt_hours, mi_online, cur_generation):
         """Update a full row of data."""
