@@ -143,6 +143,10 @@ class SolarReader:
         except ValueError:
             log.exception("Couldn't convert to float")
             return 0
+        except IndexError:
+            # It seems like wattage is sometimes unavailable and it isn't really clear why
+            log.info("Couldn't find a numerical value in the field. Instead, had value of {}".format(data))
+            return 0
         # cur_kw = float(data[0].strip().rstrip(" kW"))
 
         if "kW" in data[0]:
