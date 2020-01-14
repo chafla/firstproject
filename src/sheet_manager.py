@@ -32,7 +32,7 @@ class SheetReader:
         # credentials = SignedJwtAssertionCredentials(json_key['client_email'], json_key['private_key'], scope)
         self._gc = gspread.authorize(self._credentials)
         self._sh = self._gc.open_by_url(sheet_url)
-        self.worksheet = self._sh.get_worksheet(0)
+        self._worksheet = self._sh.get_worksheet(0)
 
         self.ts_col = "A"
         self.wh_col = "B"
@@ -45,10 +45,17 @@ class SheetReader:
         self._prev_ip = None
 
     @property
-    def gc(self):
+    def gc(self) -> gspread.Client:
         if self._credentials.access_token_expired:
             self._gc.login()
         return self._gc
+
+    @property
+    def worksheet(self) -> gspread.Worksheet:
+        """Use a property to make sure that we refresh our access token if needed"""
+        if self._credentials.access_token_expired:
+            self._gc.login()
+        return self._worksheet
 
     @property
     def cur_pos(self):
