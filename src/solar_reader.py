@@ -61,7 +61,7 @@ class SolarReader:
         if self._using_static_ip:
             return self._ip_address
 
-        for i in range(0, 256):
+        for i in range(1, 256):
             ip = "{}.{}".format(self._base_ip_range, i)
             try:
                 response = requests.get('http://%s' % ip, timeout=2)
