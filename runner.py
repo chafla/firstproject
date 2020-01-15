@@ -6,6 +6,7 @@ import logging
 
 from src.sheet_manager import SheetReader
 from src.solar_reader import SolarReader
+from src.weather import WeatherData
 
 log = logging.getLogger()
 
@@ -17,11 +18,19 @@ class State(Enum):
 
 
 class SolarData:
-    def __init__(self, sheet_reader: SheetReader, solar_reader: SolarReader):
+    def __init__(self, sheet_reader: SheetReader, solar_reader: SolarReader, weather_reader: WeatherData):
         self.sheet_reader = sheet_reader
         self.solar_reader = solar_reader
+        self.weather_reader = weather_reader
 
         self.state = State.SUNRISE_WAIT
+
+        self.wh_col = "B"
+        self.mi_col = "C"
+        self.cur_kw_col = "D"
+        self.weather_col = "E"
+
+        self.ext_ip_cell = "K2"
 
     def wait_on_sunrise(self):
         log.info("Waiting for sunrise...")
@@ -57,7 +66,24 @@ class SolarData:
                 cur_mis = self.solar_reader.get_mi_online()
                 cur_watts = self.solar_reader.get_current_watt_production()
 
-                self.sheet_reader.update_row(cur_wh, cur_mis, cur_watts)
+                # Fill each data element in piecewise.
+                # Timestamp is handled within the function
+                self.sheet_reader.update_row(**{
+                    self.wh_col: cur_wh,
+                    self.mi_col: cur_mis,
+                    self.cur_kw_col: cur_watts,
+
+                })
+
+                log.info("Data written to Docs.")
+
+                self.sheet_reader.log_ip_address(self.ext_ip_cell)
+
+                # Try to log the weather. Run this separately so that a weather API error doesn't kill everything else
+                self.sheet_reader.update_row(**{
+                    self.weather_col: self.weather_reader.get_cloud_levels()
+                })
+
             except Exception:
                 log.exception("An exception occurred in the main loop.")
             finally:
@@ -96,7 +122,7 @@ if __name__ == '__main__':
     dirname = os.path.join(os.path.dirname(__file__), "config.json")
     sheet_reader = SheetReader()
     solar_reader = SolarReader("enphase", "192.168.1")
+    weather = WeatherData()
 
-    solar_runner = SolarData(sheet_reader, solar_reader)
+    solar_runner = SolarData(sheet_reader, solar_reader, weather)
     solar_runner.run()
-

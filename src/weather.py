@@ -24,14 +24,14 @@ class WeatherData:
             config_json = json.load(raw_config_json)
 
         self._api_key = config_json["weather_api_key"]
-        self._city_id = config_json["city_id"]
+        self._city_id = config_json["weather_city_id"]
 
     def _get_current_weather_data(self) -> dict:
         """
         Get weather data from our API at city_id.
         :return: Weather data json response
         """
-        url_base = "http://api.openweathermap.org/data/2.5/forecast?id={}&APPID={}"
+        url_base = "http://api.openweathermap.org/data/2.5/weather?id={}&APPID={}"
         resp = requests.get(url_base.format(self._city_id, self._api_key))
 
         json_resp = json.loads(resp.text)

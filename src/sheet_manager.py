@@ -35,9 +35,6 @@ class SheetReader:
         self._worksheet = self._sh.get_worksheet(0)
 
         self.ts_col = "A"
-        self.wh_col = "B"
-        self.mi_col = "C"
-        self.cur_kw_col = "D"
 
         self.ext_ip_cell = "K2"
         self.int_ip_cell = "L2"
@@ -74,18 +71,33 @@ class SheetReader:
         ext_ip = get("https://api.ipify.org").text
         return ext_ip
 
-    def log_ip_address(self):
+    def log_ip_address(self, cell: str):
         """
         Log our internal and external IP address to the sheet
         """
 
         ip = self._ip_address
         if self._prev_ip != ip:
-            self.worksheet.update_acell(self.ext_ip_cell, ip)
+            self.worksheet.update_acell(cell, ip)
+            log.info("IP address updated to {}".format(ip))
             self._prev_ip = ip
 
-    def update_row(self, watt_hours, mi_online, cur_generation):
-        """Update a full row of data."""
+    def update_row(self, ts_col="A", **data: dict):
+        """
+        Update a full row of data.
+        Extra data can be added through kwargs like
+        kwargs = {
+            "A": 3,
+            "B": 4
+        },
+
+        where key is the column and the value is the data to place there.
+        The data will be placed at the next active column.
+
+        Do not fill in A, as that will be used for a timestamp.
+
+        """
+
         # TODO Update this so that we can pass in a dictionary (or kwargs) with a column and data
         timestamp_dt = datetime.datetime.now()
         timestamp_str = timestamp_dt.strftime(ts_format)
@@ -95,13 +107,7 @@ class SheetReader:
 
         pos = str(self.cur_pos)
 
-        self.worksheet.update_acell(self.ts_col + pos, timestamp_str)
+        self.worksheet.update_acell(ts_col + pos, timestamp_str)
 
-        self.worksheet.update_acell(self.wh_col + pos, watt_hours)
-        self.worksheet.update_acell(self.mi_col + pos, mi_online)
-        self.worksheet.update_acell(self.cur_kw_col + pos, cur_generation)
-
-        # Log IP address for good measure
-        self.log_ip_address()
-
-        log.info("Data written to Docs: %s mW today" % watt_hours)
+        for col, value in data.items():
+            self.worksheet.update_acell(col + pos, value)

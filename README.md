@@ -8,6 +8,6 @@ As it does so, the python program scrapes the page for data such as the total po
 
 Why a Google Sheet and not a reasonable database, you might ask?
 
-Two reasons. First, familiarity at the time, and second, for easy data processing/charting if I want.
+Two reasons. First, familiarity at the time, and second, for easy data processing and demonstration.
 
 Some of the code structure and practices are a little rough, but they are mostly in the same general format they were written in originally.
