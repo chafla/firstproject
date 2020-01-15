@@ -39,8 +39,6 @@ class SheetReader:
         self.ext_ip_cell = "K2"
         self.int_ip_cell = "L2"
 
-        self._prev_ip = None
-
     @property
     def gc(self) -> gspread.Client:
         if self._credentials.access_token_expired:
@@ -66,21 +64,13 @@ class SheetReader:
     def cur_pos(self, value):
         self.worksheet.update_acell("F1", value)
 
-    @property
-    def _ip_address(self):
-        ext_ip = get("https://api.ipify.org").text
-        return ext_ip
-
-    def log_ip_address(self, cell: str):
+    def write_cell(self, rowcol: str, value):
         """
-        Log our internal and external IP address to the sheet
+        Write a value to a cell
+        :param rowcol: Rowcol value, like A5 or BA3
+        :param value: Value to write
         """
-
-        ip = self._ip_address
-        if self._prev_ip != ip:
-            self.worksheet.update_acell(cell, ip)
-            log.info("IP address updated to {}".format(ip))
-            self._prev_ip = ip
+        self.worksheet.update_acell(rowcol, value)
 
     def update_row(self, data: dict, ts_col="A"):
         """

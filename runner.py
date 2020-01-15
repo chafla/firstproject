@@ -4,6 +4,8 @@ import time
 from enum import Enum
 import logging
 
+import requests
+
 from src.sheet_manager import SheetReader
 from src.solar_reader import SolarReader
 from src.weather import WeatherData
@@ -31,6 +33,25 @@ class SolarData:
         self.weather_col = "E"
 
         self.ext_ip_cell = "K2"
+
+        self._prev_ip = None
+
+    @property
+    def _ip_address(self):
+        ext_ip = requests.get("https://api.ipify.org").text
+        return ext_ip
+
+    # def log_ip_address(self):
+    #     """
+    #     Log our internal and external IP address to the sheet
+    #     """
+    #
+    #     ip = self._ip_address
+    #     if self._prev_ip != ip:
+    #         self.worksheet.update_acell(cell, ip)
+    #         log.info("IP address updated to {}".format(ip))
+    #         self._prev_ip = ip
+    #
 
     def wait_on_sunrise(self):
         log.info("Waiting for sunrise...")
@@ -72,16 +93,13 @@ class SolarData:
                     self.wh_col: cur_wh,
                     self.mi_col: cur_mis,
                     self.cur_kw_col: cur_watts,
+                    self.weather_col: self.weather_reader.get_cloud_levels()
                 })
 
                 log.info("Data written to Docs.")
 
-                self.sheet_reader.log_ip_address(self.ext_ip_cell)
-
-                # Try to log the weather. Run this separately so that a weather API error doesn't kill everything else
-                self.sheet_reader.update_row({
-                    self.weather_col: self.weather_reader.get_cloud_levels()
-                })
+                # Take note of our IP address as well
+                self.sheet_reader.write_cell(self.ext_ip_cell, self._ip_address)
 
             except Exception:
                 log.exception("An exception occurred in the main loop.")
