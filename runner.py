@@ -68,11 +68,10 @@ class SolarData:
 
                 # Fill each data element in piecewise.
                 # Timestamp is handled within the function
-                self.sheet_reader.update_row(**{
+                self.sheet_reader.update_row({
                     self.wh_col: cur_wh,
                     self.mi_col: cur_mis,
                     self.cur_kw_col: cur_watts,
-
                 })
 
                 log.info("Data written to Docs.")
@@ -80,7 +79,7 @@ class SolarData:
                 self.sheet_reader.log_ip_address(self.ext_ip_cell)
 
                 # Try to log the weather. Run this separately so that a weather API error doesn't kill everything else
-                self.sheet_reader.update_row(**{
+                self.sheet_reader.update_row({
                     self.weather_col: self.weather_reader.get_cloud_levels()
                 })
 

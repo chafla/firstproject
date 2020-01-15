@@ -82,7 +82,7 @@ class SheetReader:
             log.info("IP address updated to {}".format(ip))
             self._prev_ip = ip
 
-    def update_row(self, ts_col="A", **data: dict):
+    def update_row(self, data: dict, ts_col="A"):
         """
         Update a full row of data.
         Extra data can be added through kwargs like
