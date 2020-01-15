@@ -39,6 +39,9 @@ class SolarData:
     @property
     def _ip_address(self):
         ext_ip = requests.get("https://api.ipify.org").text
+        if ext_ip != self._prev_ip:
+            log.info("IP address has changed to {}".format(ext_ip))
+        self._prev_ip = ext_ip
         return ext_ip
 
     # def log_ip_address(self):

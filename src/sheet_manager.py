@@ -88,6 +88,9 @@ class SheetReader:
 
         """
 
+        if ts_col in data.keys():
+            raise ValueError("Reserved value for timestamp must not be in data.")
+
         # TODO Update this so that we can pass in a dictionary (or kwargs) with a column and data
         timestamp_dt = datetime.datetime.now()
         timestamp_str = timestamp_dt.strftime(ts_format)
