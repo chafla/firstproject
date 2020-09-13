@@ -1,14 +1,35 @@
 import datetime
 import os
+import sys
 import time
 from enum import Enum
 import logging
+from logging.handlers import RotatingFileHandler
 
 import requests
+import argparse
 
 from src.sheet_manager import SheetReader
 from src.solar_reader import SolarReader
 from src.weather import WeatherData
+from src.csv_writer import CSVWriter
+
+log = logging.getLogger()
+
+dirname = os.path.dirname(__file__)
+
+handler = RotatingFileHandler(os.path.join(dirname, "pysolar.log"), mode='a', maxBytes=5*1024*1024,
+                              backupCount=2, encoding="utf-8", delay=0)
+log.setLevel(logging.INFO)
+# handler = logging.FileHandler(filename=os.path.join(dirname, "pysolar.log"), encoding='utf-8', mode='a')
+formatter = logging.Formatter("{asctime} - {levelname} - {message}", style="{")
+stdout_handler = logging.StreamHandler(sys.stdout)
+# stderr_handler = logging.StreamHandler(sys.stderr)
+handler.setFormatter(formatter)
+stdout_handler.setFormatter(formatter)
+# stderr_handler.setFormatter(formatter)
+log.addHandler(handler)
+log.addHandler(stdout_handler)
 
 log = logging.getLogger()
 
@@ -20,10 +41,22 @@ class State(Enum):
 
 
 class SolarData:
-    def __init__(self, sheet_reader: SheetReader, solar_reader: SolarReader, weather_reader: WeatherData):
+    def __init__(self, sheet_reader: SheetReader, solar_reader: SolarReader, weather_reader: WeatherData,
+                 csv_path: str = None):
+        """
+        Create a new solar processor class.
+        :param sheet_reader: Sheet reader responsible for processing the excel sheet
+        :param solar_reader: Solar reader responsible for parsing/accessing the solar panel web ui
+        :param weather_reader:
+        :param csv_path:
+        """
         self.sheet_reader = sheet_reader
         self.solar_reader = solar_reader
         self.weather_reader = weather_reader
+
+        self.db_fields = ["timestamp", "wh", "mi_online", "cur_kw_output", "cloud_cover"]
+
+        self.database_writer = CSVWriter(csv_path, self.db_fields)
 
         self.state = State.SUNRISE_WAIT
 
@@ -89,6 +122,7 @@ class SolarData:
                 cur_wh = self.solar_reader.get_wh_production()
                 cur_mis = self.solar_reader.get_mi_online()
                 cur_watts = self.solar_reader.get_current_watt_production()
+                cloud_cover = self.weather_reader.get_cloud_levels()
 
                 # Fill each data element in piecewise.
                 # Timestamp is handled within the function
@@ -96,8 +130,18 @@ class SolarData:
                     self.wh_col: cur_wh,
                     self.mi_col: cur_mis,
                     self.cur_kw_col: cur_watts,
-                    self.weather_col: self.weather_reader.get_cloud_levels()
+                    self.weather_col: cloud_cover
                 })
+
+                csv_row_data = {
+                    "timestamp": time.time(),
+                    "wh": cur_wh,
+                    "mi_online": cur_mis,
+                    "cur_kw_output": cur_watts,
+                    "cloud_cover": cloud_cover
+                }
+
+                self.database_writer.write_row(csv_row_data)
 
                 log.info("Data written to Docs.")
 
@@ -138,11 +182,24 @@ class SolarData:
 
 
 if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser(description="Track solar panel data over an extended period of time.")
+    parser.add_argument("-c", "--config", help="Location of the json config file",
+                        type=str, default=os.path.join(os.path.dirname(__file__), "config.json"))
+
+    parser.add_argument("-a", "--address", help="Base address range to search for solar panels (xxx.xxx.xxx, "
+                                                "leaving out the last field)",
+                        type=str, default="192.168.1")
+
+    parser.add_argument("-o", "--output", help="Path to the output .csv file",
+                        type=str, default="output.csv")
+
+    args = parser.parse_args()
+
     # TODO Convert some of these into command line args
-    dirname = os.path.join(os.path.dirname(__file__), "config.json")
     sheet_reader = SheetReader()
-    solar_reader = SolarReader("enphase", "192.168.1")
+    solar_reader = SolarReader("enphase", args.address)
     weather = WeatherData()
 
-    solar_runner = SolarData(sheet_reader, solar_reader, weather)
+    solar_runner = SolarData(sheet_reader, solar_reader, weather, args.output)
     solar_runner.run()

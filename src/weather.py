@@ -1,5 +1,8 @@
 import json
+import logging
 import requests
+
+log = logging.getLogger()
 
 
 class WeatherAPIError(BaseException):
@@ -20,11 +23,17 @@ class WeatherData:
     """
 
     def __init__(self, config_fp: str = "config.json"):
+
         with open(config_fp, "r") as raw_config_json:
             config_json = json.load(raw_config_json)
 
-        self._api_key = config_json["weather_api_key"]
-        self._city_id = config_json["weather_city_id"]
+        self._functional = True
+
+        try:
+            self._api_key = config_json["weather_api_key"]
+            self._city_id = config_json["weather_city_id"]
+        except KeyError:
+            log.exception("Failed to find API keys, weather data will be dummied out.")
 
     def _get_current_weather_data(self) -> dict:
         """
@@ -48,6 +57,10 @@ class WeatherData:
 
         :return: Cloud levels out of 1, or -1 if an error occurred.
         """
+
+        if not self._functional:
+            return -1
+
         weather = self._get_current_weather_data()
 
         try:
